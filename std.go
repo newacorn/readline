@@ -59,7 +59,7 @@ func Password(prompt string) ([]byte, error) {
 	return ins.ReadPassword(prompt)
 }
 
-// readline with global configs
+// Line readline with global configs
 func Line(prompt string) (string, error) {
 	ins := getInstance()
 	ins.SetPrompt(prompt)
@@ -192,6 +192,12 @@ func (s *FillableStdin) Read(p []byte) (n int, err error) {
 }
 
 func (s *FillableStdin) Close() error {
-	s.stdinBuffer.Close()
+	_ = s.stdinBuffer.Close()
+	// 防止terminal的ioloop一直停留在ReadRune上。
+	// 导致程序不能退出。
+	cancelableS, ok := s.stdin.(io.ReadCloser)
+	if ok {
+		_ = cancelableS.Close()
+	}
 	return nil
 }

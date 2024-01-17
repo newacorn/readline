@@ -1,20 +1,20 @@
 // Readline is a pure go implementation for GNU-Readline kind library.
 //
 // example:
-// 	rl, err := readline.New("> ")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer rl.Close()
 //
-// 	for {
-// 		line, err := rl.Readline()
-// 		if err != nil { // io.EOF
-// 			break
-// 		}
-// 		println(line)
-// 	}
+//	rl, err := readline.New("> ")
+//	if err != nil {
+//		panic(err)
+//	}
+//	defer rl.Close()
 //
+//	for {
+//		line, err := rl.Readline()
+//		if err != nil { // io.EOF
+//			break
+//		}
+//		println(line)
+//	}
 package readline
 
 import (
@@ -44,8 +44,14 @@ type Config struct {
 
 	// Any key press will pass to Listener
 	// NOTE: Listener will be triggered by (nil, 0, 0) immediately
+	//
+	// 如果返回的第三个值是true的话。
+	// listener的返回值会作为Operation.buf中的内容和表示光标位置的Operation.buf.idx的值。
+	// 如果第三个参数是true的话会忽略其返回值。
 	Listener Listener
 
+	// 在EnableMask为false时，如何将Operation.buf中的缓存输出到终端。
+	// 默认的defaultPainter的行为时原样打印。
 	Painter Painter
 
 	// If VimMode is true, readline will in vim.insert mode by default
@@ -61,15 +67,23 @@ type Config struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
 
+	// 在将Operation.buf中的内容输出到终端时，用MaskRune替换其中的每个rune。
 	EnableMask bool
-	MaskRune   rune
+	// 替换字符，password 读取时用到了这个值并且没有设置值。
+	// 所以默认readPassword的行为时输入字符不会移动光标也不会显示。
+	MaskRune rune
 
 	// erase the editing line after user submited it
 	// it use in IM usually.
+	// 在提交输入之后(比如按enter键)，清空提示符和其后面的所有字符串。光标移动到行首。
 	UniqueEditLine bool
 
 	// filter input runes (may be used to disable CtrlZ or for translating some keys to different actions)
 	// -> output = new (translated) rune and true/false if continue with processing this one
+	//
+	// 如果返回false。则buf会忽略第一个返回值rune。
+	// 此函数可以在buf处理输入rune(参数)之前，处理此rune。buf真正处理的是
+	// 第一个返回值。
 	FuncFilterInputRune func(rune) (rune, bool)
 
 	// force use interactive even stdout is not a tty
@@ -221,7 +235,7 @@ func (i *Instance) GenPasswordConfig() *Config {
 	return i.Operation.GenPasswordConfig()
 }
 
-// we can generate a config by `i.GenPasswordConfig()`
+// ReadPasswordWithConfig we can generate a config by `i.GenPasswordConfig()`
 func (i *Instance) ReadPasswordWithConfig(cfg *Config) ([]byte, error) {
 	return i.Operation.PasswordWithConfig(cfg)
 }
@@ -252,7 +266,7 @@ func (i *Instance) Line() *Result {
 	return &Result{ret, err}
 }
 
-// err is one of (nil, io.EOF, readline.ErrInterrupt)
+// Readline err is one of (nil, io.EOF, readline.ErrInterrupt)
 func (i *Instance) Readline() (string, error) {
 	return i.Operation.String()
 }
@@ -271,7 +285,7 @@ func (i *Instance) ReadSlice() ([]byte, error) {
 	return i.Operation.Slice()
 }
 
-// we must make sure that call Close() before process exit.
+// Close we must make sure that call Close() before process exit.
 // if there has a pending reading operation, that reading will be interrupted.
 // so you can capture the signal and call Instance.Close(), it's thread-safe.
 func (i *Instance) Close() error {
@@ -283,13 +297,14 @@ func (i *Instance) Close() error {
 	return nil
 }
 
-// call CaptureExitSignal when you want readline exit gracefully.
+// CaptureExitSignal call CaptureExitSignal when you want readline exit gracefully.
 func (i *Instance) CaptureExitSignal() {
 	CaptureExitSignal(func() {
 		i.Close()
 	})
 }
 
+// Clean 清空prompt和其后的输入。
 func (i *Instance) Clean() {
 	i.Operation.Clean()
 }
@@ -301,9 +316,10 @@ func (i *Instance) Write(b []byte) (int, error) {
 // WriteStdin prefill the next Stdin fetch
 // Next time you call ReadLine() this value will be writen before the user input
 // ie :
-//  i := readline.New()
-//  i.WriteStdin([]byte("test"))
-//  _, _= i.Readline()
+//
+//	i := readline.New()
+//	i.WriteStdin([]byte("test"))
+//	_, _= i.Readline()
 //
 // gives
 //

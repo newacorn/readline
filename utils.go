@@ -20,31 +20,93 @@ var (
 )
 
 const (
+	// CharLineStart move the cursor to the top left corner of screen
+	// 将光标移动到终端当前页的左上角。
+	// \033[H
 	CharLineStart = 1
-	CharBackward  = 2
+	// CharBackward vim b
+	CharBackward = 2
+	// CharInterrupt Control-C is often used to interrupt a program or process, a standard that started with Dec operating systems
+	// ^C
 	CharInterrupt = 3
-	CharDelete    = 4
-	CharLineEnd   = 5
-	CharForward   = 6
-	CharBell      = 7
-	CharCtrlH     = 8
-	CharTab       = 9
-	CharCtrlJ     = 10
-	CharKill      = 11
-	CharCtrlL     = 12
-	CharEnter     = 13
-	CharNext      = 14
-	CharPrev      = 16
+	// CharDelete Delete删除光标处的字符光标位置不移动
+	// \033[3~
+	// 通过^D输入。
+	// 如果buf中没有内容，会将此输入作为EOF来处理。
+	CharDelete = 4
+	// CharLineEnd 将光标移动到输入的末尾
+	// \033[F
+	CharLineEnd = 5
+	// CharForward \033[C 光标向前移动一个位置
+	// vim l
+	CharForward = 6
+	// CharBell "\a" Bell，终端会发出声音。
+	//  It is usually used to indicate a problem where a wrong character has been typed.
+	CharBell = 7
+	// CharCtrlH BS 将光标像左移动一个位置
+	// 此包会删除移动后的光标位置处的字符。同 Ascii 127。
+	// 通过^H输入
+	CharCtrlH = 8
+	// CharTab Ascii Tab
+	CharTab = 9
+	// CharCtrlJ 换行 Ascii LF。同 CharEnter 功能一致。
+	// 通过 ^J 输入
+	CharCtrlJ = 10
+	// CharKill 光标处到输入末尾字符都会被删除。
+	// 通过^K输入。
+	CharKill = 11
+	// CharCtrlL 清除终端中整页内容。并重新输出buf中的内容。
+	// 通过^L输入
+	// ASCII 12
+	CharCtrlL = 12
+	// CharEnter 回车键
+	// ASCII 13
+	CharEnter = 13
+	// CharNext \033[B
+	// 将后一个历史记录替换当前输入。
+	// 通过^N输入
+	// ASCII 14
+	CharNext = 14
+	// CharPrev \033[A
+	// 将前一个历史记录替换当前输入。
+	// 通过^P输入
+	// ASCII 16
+	CharPrev = 16
+	// CharBckSearch Ascii DC2
+	// 通过^R输入
 	CharBckSearch = 18
+	// CharFwdSearch 通过^S输入
 	CharFwdSearch = 19
+	// CharTranspose 通过^T输入
+	// 将光标处的字符与其左边的字符位置互换，并将光标向右移动一个位置。
 	CharTranspose = 20
-	CharCtrlU     = 21
-	CharCtrlW     = 23
-	CharCtrlY     = 25
-	CharCtrlZ     = 26
-	CharEsc       = 27
-	CharO         = 79
-	CharEscapeEx  = 91
+	// CharCtrlU 通过^U输入，与^K相反清空光标前面的所有字符，不清除光标位置处的字符。
+	CharCtrlU = 21
+	// CharCtrlW 通过^W输入。
+	// 同 MetaBackspace 用来删除光标左边的单词部分。光标位置上的字符保留。整体向左移动。
+	// 如果光标处不是单词字符，则删除其左边的字符直到删除完一个单词。
+	CharCtrlW = 23
+	// CharCtrlY 通过^Y输入
+	// 将上次删除的字符串。插入到光标左边的位置。光标依旧在其原来的字符上。
+	CharCtrlY = 25
+	// CharCtrlZ 通过^Z输入
+	// 执行 SleepToResume
+	CharCtrlZ = 26
+	// CharEsc ASCII ESC
+	// 使用 ^[输入。
+	// 在vim 模式中使用作为退出编辑模式.
+	CharEsc = 27
+	// CharO ASCII 79
+	// ^]O
+	// 	expectNextChar = true
+	//  isEscapeSS3 = true
+	CharO = 79
+	// CharEscapeEx ^][
+	// 	expectNextChar = true
+	//				isEscapeEx = true
+	CharEscapeEx = 91
+	// CharBackspace delete the previous character in the line mode
+	// Ascii码 127
 	CharBackspace = 127
 )
 
@@ -230,7 +292,7 @@ func SplitByLine(start, screenWidth int, rs []rune) []string {
 	return ret
 }
 
-// calculate how many lines for N character
+// LineCount calculate how many lines for N character
 func LineCount(screenWidth, w int) int {
 	r := w / screenWidth
 	if w%screenWidth != 0 {
@@ -263,10 +325,11 @@ func GetInt(s []string, def int) int {
 
 type RawMode struct {
 	state *State
+	// curTermios *Termios
 }
 
 func (r *RawMode) Enter() (err error) {
-	r.state, err = MakeRaw(GetStdin())
+	r.state /*r.curTermios ,*/, err = MakeRaw(GetStdin())
 	return err
 }
 
@@ -293,7 +356,7 @@ func debugList(l *list.List) {
 	}
 }
 
-// append log info to another file
+// Debug append log info to another file
 func Debug(o ...interface{}) {
 	f, _ := os.OpenFile("debug.tmp", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	fmt.Fprintln(f, o...)

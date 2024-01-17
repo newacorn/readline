@@ -51,8 +51,9 @@ func RetSegment(segments [][]rune, cands [][]rune, idx int) ([][]rune, int) {
 	return ret, idx
 }
 
+// SplitSegment 以空格分隔[]rune切片，pos反应的时最后一个片段的长度。
 func SplitSegment(line []rune, pos int) ([][]rune, int) {
-	segs := [][]rune{}
+	var segs [][]rune
 	lastIdx := -1
 	line = line[:pos]
 	pos = 0
@@ -69,7 +70,7 @@ func SplitSegment(line []rune, pos int) ([][]rune, int) {
 	return segs, pos
 }
 
-func (c *SegmentComplete) Do(line []rune, pos int) (newLine [][]rune, offset int) {
+func (c *SegmentComplete) Do(line []rune, pos int) (newLine, commentLine [][]rune, offset int) {
 
 	segment, idx := SplitSegment(line, pos)
 
@@ -78,5 +79,5 @@ func (c *SegmentComplete) Do(line []rune, pos int) (newLine [][]rune, offset int
 	for idx := range newLine {
 		newLine[idx] = append(newLine[idx], ' ')
 	}
-	return newLine, offset
+	return newLine, nil, offset
 }

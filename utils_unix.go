@@ -1,3 +1,4 @@
+//go:build aix || darwin || dragonfly || freebsd || (linux && !appengine) || netbsd || openbsd || os400 || solaris
 // +build aix darwin dragonfly freebsd linux,!appengine netbsd openbsd os400 solaris
 
 package readline
@@ -45,7 +46,9 @@ func GetScreenWidth() int {
 }
 
 // ClearScreen clears the console screen
+// 清除终端当前页
 func ClearScreen(w io.Writer) (int, error) {
+	// 将光标移动到第一行第一列然后将清除整页内容后，光标停留在第一行第一个列。
 	return w.Write([]byte("\033[H"))
 }
 

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build aix || darwin || dragonfly || freebsd || (linux && !appengine) || netbsd || openbsd || os400 || solaris
 // +build aix darwin dragonfly freebsd linux,!appengine netbsd openbsd os400 solaris
 
 // Package terminal provides support functions for dealing with terminals, as
@@ -9,11 +10,11 @@
 //
 // Putting a terminal into raw mode is the most common requirement:
 //
-// 	oldState, err := terminal.MakeRaw(0)
-// 	if err != nil {
-// 	        panic(err)
-// 	}
-// 	defer terminal.Restore(0, oldState)
+//	oldState, err := terminal.MakeRaw(0)
+//	if err != nil {
+//	        panic(err)
+//	}
+//	defer terminal.Restore(0, oldState)
 package readline
 
 import (
@@ -31,15 +32,40 @@ func IsTerminal(fd int) bool {
 	_, err := getTermios(fd)
 	return err == nil
 }
+func InRaw(t Termios) bool {
+	r1 := t.Iflag&syscall.IGNBRK | syscall.BRKINT | syscall.PARMRK | syscall.ISTRIP | syscall.INLCR | syscall.IGNCR | syscall.ICRNL | syscall.IXON
+	if r1 > 0 {
+		return false
+	}
+	// newState.Oflag &^= syscall.OPOST
+	r2 := t.Lflag&syscall.ECHO | syscall.ECHONL | syscall.ICANON | syscall.ISIG | syscall.IEXTEN
+	if r2 > 0 {
+		return false
+	}
+	r3 := t.Cflag&syscall.CSIZE | syscall.PARENB
+	if r3 > 0 {
+		return false
+	}
+	if r4 := t.Cflag & syscall.CS8; r4 != 1 {
+		return false
+	}
+	if t.Cc[syscall.VMIN] != 1 || t.Cc[syscall.VTIME] != 0 {
+		return false
+	}
+	return true
+}
 
 // MakeRaw put the terminal connected to the given file descriptor into raw
 // mode and returns the previous state of the terminal so that it can be
 // restored.
-func MakeRaw(fd int) (*State, error) {
+//
+// 将STDIN MarkRaw后，在终端输入不会显示字符，也不会移动光标。
+// 所有的按键操作也直接作为字符传递。不会对终端外观产生影响。
+func MakeRaw(fd int) (*State /*Termios,*/, error) {
 	var oldState State
 
 	if termios, err := getTermios(fd); err != nil {
-		return nil, err
+		return nil /*nil,*/, err
 	} else {
 		oldState.termios = *termios
 	}
@@ -56,7 +82,7 @@ func MakeRaw(fd int) (*State, error) {
 	newState.Cc[syscall.VMIN] = 1
 	newState.Cc[syscall.VTIME] = 0
 
-	return &oldState, setTermios(fd, &newState)
+	return &oldState /*&newState,*/, setTermios(fd, &newState)
 }
 
 // GetState returns the current state of a terminal which may be useful to

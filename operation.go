@@ -378,6 +378,7 @@ func (o *Operation) String() (string, error) {
 	return string(r), err
 }
 
+// Runes 从STDIN中读取一行字符串
 func (o *Operation) Runes() ([]rune, error) {
 	o.t.EnterRawMode()
 	defer o.t.ExitRawMode()
@@ -506,6 +507,7 @@ func (o *Operation) Refresh() {
 	}
 }
 
+// Clean 清空prompt和其后的输入。
 func (o *Operation) Clean() {
 	o.buf.Clean()
 }
@@ -518,15 +520,25 @@ type DumpListener struct {
 	f func(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool)
 }
 
+// OnChange 每次从标准输入中读取行时，都会使用nil、0、0来调用此函数。
+// 此函数会调用设置的Listener。
+//
+// 等到收到字符时在Operation.ioloop函数中再处理好字符后，会使用:line=Operation.buf的内容；pos=光标位置;key=此次输入的字符
+// 来调用OnChange方法。
 func (d *DumpListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
 	return d.f(line, pos, key)
 }
 
 type Listener interface {
+	// OnChange line是当前buf中的内容的拷贝,pos是表示光标位置的idx的值，key是用户输入的一个字符。
+	// 如果返回ok是true的话，输入buf会将buf设置为newLine的值，idx设置为newPos。
+	// ok表示是否使用返回值。
 	OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool)
 }
 
 type Painter interface {
+	// Paint line表示Operation.buf中的内容。
+	// pos 表示Operation.buf中光标的位置。
 	Paint(line []rune, pos int) []rune
 }
 

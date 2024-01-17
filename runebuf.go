@@ -24,6 +24,7 @@ type RuneBuffer struct {
 	interactive bool
 	cfg         *Config
 
+	// 终端屏幕的宽度
 	width int
 
 	bck *runeBufferBck
@@ -102,6 +103,8 @@ func (r *RuneBuffer) promptLen() int {
 	return runes.WidthAll(runes.ColorFilter(r.prompt))
 }
 
+// RuneSlice i为负时，光标左边复制i个字符并返回
+// i 为正时，光标处其+右边i-1个字符。
 func (r *RuneBuffer) RuneSlice(i int) []rune {
 	r.Lock()
 	defer r.Unlock()
@@ -201,10 +204,14 @@ func (r *RuneBuffer) Erase() {
 
 func (r *RuneBuffer) Delete() (success bool) {
 	r.Refresh(func() {
+
 		if r.idx == len(r.buf) {
+			// 光标不在
 			return
 		}
+		// 将删除字符存储到r.lastKill中
 		r.pushKill(r.buf[r.idx : r.idx+1])
+		// 从buf中移除被删除的字符
 		r.buf = append(r.buf[:r.idx], r.buf[r.idx+1:]...)
 		success = true
 	})
@@ -380,6 +387,7 @@ func (r *RuneBuffer) MoveToLineEnd() {
 	})
 }
 
+// LineCount prompt和其后的输入占屏幕多少行
 func (r *RuneBuffer) LineCount(width int) int {
 	if width == -1 {
 		width = r.width
@@ -429,12 +437,14 @@ func (r *RuneBuffer) getSplitByLine(rs []rune) []string {
 	return SplitByLine(r.promptLen(), r.width, rs)
 }
 
+// IdxLine prompt到光标位置的字符串占屏幕的行数-1
 func (r *RuneBuffer) IdxLine(width int) int {
 	r.Lock()
 	defer r.Unlock()
 	return r.idxLine(width)
 }
 
+// prompt到光标位置的字符串占屏幕的行数-1
 func (r *RuneBuffer) idxLine(width int) int {
 	if width == 0 {
 		return 0
@@ -443,14 +453,20 @@ func (r *RuneBuffer) idxLine(width int) int {
 	return len(sp) - 1
 }
 
+// CursorLineCount 背景：prompt与其后的输入形成的行数
+// 此函数返回值为光标所在行(1)+后面的剩余的输入行。
 func (r *RuneBuffer) CursorLineCount() int {
 	return r.LineCount(r.width) - r.IdxLine(r.width)
 }
 
+// Refresh 如果是交互模式先清空终端中prompt和其后的内容，然后执行操作r.buf的函数f。最后重新将r.buf中的内容
+// 输出到终端。
 func (r *RuneBuffer) Refresh(f func()) {
 	r.Lock()
 	defer r.Unlock()
 
+	// 非交互模式，即输入r中存储的输入内容并不会显示在目标输出中。
+	// 这种情况下只需执行操作r.buf的函数。不必清空输入在终端上产生的记录。
 	if !r.interactive {
 		if f != nil {
 			f()
@@ -458,10 +474,12 @@ func (r *RuneBuffer) Refresh(f func()) {
 		return
 	}
 
+	// 清空prompt和其后面的内容。
 	r.clean()
 	if f != nil {
 		f()
 	}
+	// 重新打印r.buf中的内容。
 	r.print()
 }
 
@@ -588,6 +606,11 @@ func (r *RuneBuffer) SetPrompt(prompt string) {
 	r.Unlock()
 }
 
+// 将prompt和prompt之后在屏幕中的输入都清空。
+//
+// 参数：
+// w 终端输出
+// idxLine prompt和输入内容占屏幕的行数-1
 func (r *RuneBuffer) cleanOutput(w io.Writer, idxLine int) {
 	buf := bufio.NewWriter(w)
 
@@ -606,20 +629,25 @@ func (r *RuneBuffer) cleanOutput(w io.Writer, idxLine int) {
 			io.WriteString(buf, "\033[2K\r")
 		}
 	}
+	// 将清除内容的控制字符输出到终端。
 	buf.Flush()
 	return
 }
 
+// Clean 清空prompt和其后的输入。
 func (r *RuneBuffer) Clean() {
 	r.Lock()
 	r.clean()
 	r.Unlock()
 }
 
+// 清空终端中的prompt和其后的输入。
 func (r *RuneBuffer) clean() {
 	r.cleanWithIdxLine(r.idxLine(r.width))
 }
 
+// 根据idxLine从下往上清除终端中 prompt+其后的输入按行清除。
+// 要清除的行数为 idxLine+1
 func (r *RuneBuffer) cleanWithIdxLine(idxLine int) {
 	if r.hadClean || !r.interactive {
 		return

@@ -95,7 +95,7 @@ func (t *Terminal) Readline() *Operation {
 	return NewOperation(t, t.cfg)
 }
 
-// return rune(0) if meet EOF
+// ReadRune return rune(0) if meet EOF
 func (t *Terminal) ReadRune() rune {
 	ch, ok := <-t.outchan
 	if !ok {
@@ -115,6 +115,9 @@ func (t *Terminal) KickRead() {
 	}
 }
 
+// Terminal 从STDIN中读取内容，如果是控制字符序列通过CTRL+其它字符输入的，转为单个rune。
+// 比如通过键盘输入ctrl+D。从终端中读取到的是 27(ESC)、[、D 这3个rune字符，其会将其转换为
+// CharBackward 后发送给 Operation 的ioloop。
 func (t *Terminal) ioloop() {
 	t.wg.Add(1)
 	defer func() {
@@ -122,14 +125,35 @@ func (t *Terminal) ioloop() {
 		close(t.outchan)
 	}()
 
+	type readRune struct {
+		r   rune
+		err error
+	}
 	var (
-		isEscape       bool
-		isEscapeEx     bool
-		isEscapeSS3    bool
+		// 如果从STDIN读取一个rune是ESC，这此值会被设置为true。
+		isEscape    bool
+		isEscapeEx  bool
+		isEscapeSS3 bool
+		// 每次成功发送一个非终端/换行字符后，此值就会被设置为true。
+		// 初始此值设置为false，terminal停靠在kickChan通道上，由Operation
+		// 在需要读取字符时负责唤醒。
 		expectNextChar bool
+		// recvR          = make(chan *readRune)
 	)
 
 	buf := bufio.NewReader(t.getStdin())
+	/*
+		go func() {
+			for {
+				r, _, err := buf.ReadRune()
+				select {
+				case recvR <- &readRune{r: r, err: err}:
+				case <-t.stopChan:
+					return
+				}
+			}
+		}()
+	*/
 	for {
 		if !expectNextChar {
 			atomic.StoreInt32(&t.isReading, 0)
@@ -141,6 +165,19 @@ func (t *Terminal) ioloop() {
 			}
 		}
 		expectNextChar = false
+		/*
+			var r rune
+			var err error
+			var recv *readRune
+			select {
+			case recv = <-recvR:
+				r = recv.r
+				err = recv.err
+			case <-t.stopChan:
+				return
+			}
+		*/
+
 		r, _, err := buf.ReadRune()
 		if err != nil {
 			if strings.Contains(err.Error(), "interrupted system call") {
@@ -199,15 +236,28 @@ func (t *Terminal) ioloop() {
 		switch r {
 		case CharEsc:
 			if t.cfg.VimMode {
-				t.outchan <- r
-				break
+				select {
+				case t.outchan <- r:
+					break
+				case <-t.stopChan:
+					return
+				}
 			}
 			isEscape = true
 		case CharInterrupt, CharEnter, CharCtrlJ, CharDelete:
 			expectNextChar = false
 			fallthrough
 		default:
-			t.outchan <- r
+			// 当按^@时会像terminal发送单单一个0，而Operation认为0是退出逻辑会通过关闭
+			// stopChan来通知此循环，如果expectNextChar为true，则接下来不会在stopChan上停靠。
+			// if r == 0 {
+			// 	expectNextChar = false
+			// }
+			select {
+			case <-t.stopChan:
+				return
+			case t.outchan <- r:
+			}
 		}
 	}
 
